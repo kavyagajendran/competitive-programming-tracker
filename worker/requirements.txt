@@ -1,0 +1,7 @@
+gspread
+oauth2client
+requests
+pandas
+python-dotenv
+schedule
+beautifulsoup4
