@@ -106,5 +106,3 @@ Click **Start Tracking**. The Live Logs panel will show real-time progress:
 ##  Contributing
 Contributions are welcome! Please open an issue or submit a pull request for any improvements.
 
-##  License
-This project is licensed under the MIT License.
