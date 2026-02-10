@@ -15,6 +15,7 @@ def test_leetcode_contest_stats(username):
       userContestRankingHistory(username: $username) {
         contest {
           title
+          startTime
         }
         rating
         ranking
@@ -46,6 +47,8 @@ def test_leetcode_contest_stats(username):
             history = data['data']['userContestRankingHistory']
             if history:
                 print("Latest History Entry:", json.dumps(history[-1], indent=2))
+                for contest in history[-5:]:
+                    print(f"Title: {contest['contest']['title']}, StartTime: {contest['contest']['startTime']}")
                 # Check for filtered (attended) contests? usually history includes all IF they registered? 
                 # Actually history usually contains only attended ones or where rating changed?
                 

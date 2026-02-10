@@ -1,3 +1,4 @@
+import datetime
 import requests
 import time
 
@@ -106,6 +107,122 @@ def get_user_stats(username):
         print(f"Exception fetching {username}: {e}")
         return None
 
+def get_contest_data_by_date(username, date_str):
+    """
+    Fetches contest details for a specific date (YYYY-MM-DD).
+    """
+    query = """
+    query userContestRankingHistory($username: String!) {
+      userContestRankingHistory(username: $username) {
+        contest {
+          title
+          startTime
+        }
+        rating
+        ranking
+        problemsSolved
+        totalProblems
+      }
+    }
+    """
+    
+    variables = {"username": username}
+    payload = {"query": query, "variables": variables}
+    
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+        "Referer": f"https://leetcode.com/{username}/",
+        "Content-Type": "application/json"
+    }
+
+    try:
+        response = requests.post(LEETCODE_URL, json=payload, headers=headers, timeout=10)
+        response.raise_for_status()
+        data = response.json()
+        
+        if "errors" in data:
+            print(f"Error fetching data for {username}: {data['errors']}")
+            return None
+
+        history = data.get("data", {}).get("userContestRankingHistory", [])
+        
+        # Convert input date to timestamp range for the whole day (UTC)
+        # Using simple string comparison on YYYY-MM-DD might be easier if we convert timestamp to date
+        
+        target_date = date_str
+        
+        for entry in history:
+            contest = entry.get("contest", {})
+            start_timestamp = contest.get("startTime")
+            if start_timestamp:
+                # Convert timestamp to YYYY-MM-DD
+                contest_date = datetime.datetime.utcfromtimestamp(start_timestamp).strftime('%Y-%m-%d')
+                if contest_date == target_date:
+                    # Found the contest
+                    return {
+                        "title": contest.get("title"),
+                        "startTime": start_timestamp,
+                        "date": contest_date,
+                        "rank": entry.get("ranking"),
+                        "rating": entry.get("rating"),
+                        "problemsSolved": entry.get("problemsSolved"),
+                        "totalProblems": entry.get("totalProblems")
+                    }
+        
+        return None # Not found
+
+    except Exception as e:
+        print(f"Exception fetching contest by date for {username}: {e}")
+        return None
+
+
+def get_upcoming_contests():
+    """
+    Fetches upcoming contests from LeetCode GraphQL.
+    """
+    query = """
+    query {
+        topTwoContests {
+            title
+            titleSlug
+            startTime
+            duration
+            originStartTime
+            isVirtual
+        }
+    }
+    """
+    
+    payload = {"query": query}
+    headers = {
+        "User-Agent": "Mozilla/5.0",
+        "Content-Type": "application/json"
+    }
+
+    try:
+        response = requests.post("https://leetcode.com/graphql", json=payload, headers=headers, timeout=10)
+        if response.status_code == 200:
+            data = response.json()
+            contests = data.get('data', {}).get('topTwoContests', [])
+            upcoming = []
+            for c in contests:
+                start_time = datetime.datetime.fromtimestamp(c['startTime'])
+                upcoming.append({
+                    'id': c['titleSlug'],
+                    'name': c['title'],
+                    'startTime': start_time.isoformat(),
+                    'duration': c['duration'],
+                    'platform': 'LeetCode',
+                    'url': f"https://leetcode.com/contest/{c['titleSlug']}"
+                })
+            return upcoming
+    except Exception as e:
+        print(f"Error fetching LeetCode contests: {e}")
+        return []
+
 if __name__ == "__main__":
     # Test
-    print(get_user_stats("hitesh_choudhary")) # Example user
+    # print(get_user_stats("hitesh_choudhary")) # Example user
+    # print(get_contest_data_by_date("hitesh_choudhary", "2023-01-01"))
+    print(get_upcoming_contests())
+

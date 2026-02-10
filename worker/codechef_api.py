@@ -118,6 +118,53 @@ def get_codechef_stats(username):
         print(f"Exception fetching CodeChef {username}: {e}")
         return {"error": f"Exception: {str(e)}"}
 
+
+def get_upcoming_contests():
+    """
+    Scrapes upcoming contests from CodeChef.
+    Note: CodeChef API is protected, simple scraping of /contests might be needed 
+    but it's dynamic. Using an alternative public API if available or scraping.
+    For this implementation, we will try to scrape the public contest list if possible,
+    or use a known public endpoint.
+    Actual scraping of codechef.com/contests is hard due to React/JS. 
+    We will try to use a common competitive programming API aggregator or return static/mock if scraping fails heavily,
+    but let's try a simple request to their API endpoint that often works for public.
+    """
+    # CodeChef often exposes: https://www.codechef.com/api/list/contests/all?sort_by=START&sorting_order=asc&offset=0&mode=all
+    url = "https://www.codechef.com/api/list/contests/all?sort_by=START&sorting_order=asc&offset=0&mode=all"
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+    }
+
+    try:
+        res = requests.get(url, headers=headers, timeout=10)
+        if res.status_code == 200:
+            data = res.json()
+            # future_contests are usually present
+            if 'future_contests' in data:
+                contests = data['future_contests']
+                upcoming = []
+                for c in contests:
+                    # c['contest_start_date_iso'] exists usually
+                    start = c.get('contest_start_date_iso')
+                    if not start:
+                        # try parse start_date
+                        pass 
+                    
+                    upcoming.append({
+                        'id': c['contest_code'],
+                        'name': c['contest_name'],
+                        'startTime': start,
+                        'duration': int(c.get('contest_duration', 0)) * 60,
+                        'platform': 'CodeChef',
+                        'url': f"https://www.codechef.com/{c['contest_code']}"
+                    })
+                return upcoming
+    except Exception as e:
+        print(f"Error fetching CodeChef contests: {e}")
+        return []
+
 if __name__ == "__main__":
     # Test
-    print(get_codechef_stats("gennady"))
+    # print(get_codechef_stats("gennady"))
+    print(get_upcoming_contests())

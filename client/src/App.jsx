@@ -1,209 +1,64 @@
-import { useState, useEffect } from 'react'
 
-const PLATFORM_FIELDS = {
-  'LeetCode': [
-    'Global Ranking', 'Contest Ranking', 'Total Solved',
-    'Easy', 'Medium', 'Hard', 'Contest Rating', 'Attended Contests',
-    'Top Percentage', 'Last Contest Rank', 'Last Contest Solved'
-  ],
-  'CodeChef': [
-    'Current Rating', 'Highest Rating', 'Star Rating',
-    'Global Ranking', 'Country Ranking', 'Total Solved', 'Division'
-  ],
-  'Codeforces': [
-    'Problems Solved', 'Current Rank', 'Current Rating',
-    'Max. Rank', 'Max. Rating', 'Last Contest Rank', 'Last Contest Solved', 'Last Contest'
-  ]
+import './App.css'
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import Layout from './components/Layout'
+import Login from './pages/Login'
+import Tracker from './pages/Tracker'
+import Admin from './pages/Admin'
+import ProtectedRoute from './components/ProtectedRoute'
+import StudentDashboard from './pages/StudentDashboard';
+import StaffDashboard from './pages/StaffDashboard';
+import HODDashboard from './pages/HODDashboard';
+
+// Helper to redirect based on role
+function NavigateToDashboard() {
+  const role = localStorage.getItem('role') || 'student';
+  if (role === 'admin') return <Navigate to="/admin" replace />;
+  if (role === 'hod') return <Navigate to="/hod" replace />;
+  if (role === 'staff') return <Navigate to="/staff" replace />;
+  return <Navigate to="/student" replace />;
 }
 
 function App() {
-  const [status, setStatus] = useState({ isRunning: false, logs: [] })
-  const [loading, setLoading] = useState(false)
-
-  // Form State
-  const [platform, setPlatform] = useState('LeetCode')
-  const [sheetUrl, setSheetUrl] = useState('')
-  const [csvFile, setCsvFile] = useState(null)
-
-  // Initialize with all fields selected for the default platform
-  const [selectedFields, setSelectedFields] = useState(new Set(PLATFORM_FIELDS['LeetCode']))
-
-  const fetchStatus = async () => {
-    try {
-      const res = await fetch('http://localhost:5000/api/status')
-      const data = await res.json()
-      setStatus(data)
-    } catch (error) {
-      console.error("Failed to fetch status:", error)
-    }
-  }
-
-  useEffect(() => {
-    fetchStatus()
-    const interval = setInterval(fetchStatus, 2000)
-    return () => clearInterval(interval)
-  }, [])
-
-  // Update selected fields when platform changes
-  useEffect(() => {
-    if (PLATFORM_FIELDS[platform]) {
-      setSelectedFields(new Set(PLATFORM_FIELDS[platform]))
-    }
-  }, [platform])
-
-  const handleFileChange = (e) => {
-    if (e.target.files) {
-      setCsvFile(e.target.files[0])
-    }
-  }
-
-  const handleFieldToggle = (field) => {
-    const next = new Set(selectedFields)
-    if (next.has(field)) {
-      next.delete(field)
-    } else {
-      next.add(field)
-    }
-    setSelectedFields(next)
-  }
-
-  const handleSync = async () => {
-    if (!csvFile || !sheetUrl) {
-      alert("Please provide both a CSV file and a Google Sheet Link.")
-      return
-    }
-
-    if (selectedFields.size === 0) {
-      alert("Please select at least one field to update.")
-      return
-    }
-
-    setLoading(true)
-
-    // Read CSV Content
-    const reader = new FileReader()
-    reader.onload = async (e) => {
-      const text = e.target.result
-
-      try {
-        const res = await fetch('http://localhost:5000/api/track', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            csvContent: text,
-            platform,
-            sheetUrl,
-            fields: Array.from(selectedFields)
-          })
-        })
-
-        if (res.ok) {
-          fetchStatus()
-        } else {
-          const err = await res.json()
-          alert(`Error: ${err.message}`)
-        }
-      } catch (error) {
-        console.error("Failed to start tracking:", error)
-        alert("Network error starting tracker.")
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    reader.readAsText(csvFile)
-  }
-
   return (
-    <div className="container">
-      <header>
-        <h1>Competitive Programming Tracker</h1>
-      </header>
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<Layout />}>
+          <Route index element={<ProtectedRoute><NavigateToDashboard /></ProtectedRoute>} />
 
-      <main>
-        <div className="card">
-          <h2>Configuration</h2>
+          <Route path="student" element={
+            <ProtectedRoute allowedRoles={['student', 'admin', 'hod']}>
+              <StudentDashboard />
+            </ProtectedRoute>
+          } />
 
-          <div className="form-group">
-            <label>Platform:</label>
-            <select value={platform} onChange={(e) => setPlatform(e.target.value)}>
-              <option value="LeetCode">LeetCode</option>
-              <option value="CodeChef">CodeChef</option>
-              <option value="Codeforces">Codeforces</option>
-            </select>
-          </div>
+          <Route path="staff" element={
+            <ProtectedRoute allowedRoles={['staff', 'admin', 'hod']}>
+              <StaffDashboard />
+            </ProtectedRoute>
+          } />
 
-          {/* Field Selection */}
-          <div className="form-group">
-            <label>Fields to Update:</label>
-            <div className="checkbox-group">
-              {PLATFORM_FIELDS[platform].map(field => (
-                <label key={field}>
-                  <input
-                    type="checkbox"
-                    checked={selectedFields.has(field)}
-                    onChange={() => handleFieldToggle(field)}
-                  />
-                  {field}
-                </label>
-              ))}
-            </div>
-          </div>
+          <Route path="hod" element={
+            <ProtectedRoute allowedRoles={['hod', 'admin']}>
+              <HODDashboard />
+            </ProtectedRoute>
+          } />
 
-          <div className="form-group">
-            <label>Upload CSV File (Profile Links):</label>
-            <input type="file" accept=".csv" onChange={handleFileChange} />
-          </div>
+          <Route path="tracker" element={
+            <ProtectedRoute allowedRoles={['staff', 'admin']}>
+              <Tracker />
+            </ProtectedRoute>
+          } />
 
-          <div className="form-group">
-            <label>Google Sheet Link / Name:</label>
-            <input
-              type="text"
-              placeholder="e.g. Tracking Data OR https://docs.google.com/..."
-              value={sheetUrl}
-              onChange={(e) => setSheetUrl(e.target.value)}
-            />
-          </div>
-
-          <button
-            onClick={handleSync}
-            disabled={status.isRunning || loading}
-            className={status.isRunning ? 'btn-running' : 'btn-primary'}
-          >
-            {status.isRunning ? 'Tracking in Progress...' : 'Start Tracking'}
-          </button>
-        </div>
-
-        <div className="card">
-          <h2>Live Logs</h2>
-          <div className="logs-container">
-            {status.logs.length === 0 ? (
-              <p className="log-placeholder">Waiting for logs...</p>
-            ) : (
-              status.logs.map((log, i) => {
-                let className = "log-entry"
-                if (log.includes("Failed") || log.includes("Error")) className += " log-error"
-                else if (log.includes("Processing") || /\[\d+\/\d+\]/.test(log)) className += " log-process"
-                else if (log.includes("Success") || log.includes("Updated") || log.includes("Done")) className += " log-success"
-
-                // Highlight timestamp [YYYY-MM-DD HH:MM:SS]
-                const match = log.match(/^(\[.*?\])(.*)/)
-                if (match) {
-                  return (
-                    <div key={i} className={className}>
-                      <span className="log-timestamp">{match[1]}</span>
-                      {match[2]}
-                    </div>
-                  )
-                }
-                return <div key={i} className={className}>{log}</div>
-              })
-            )}
-            {status.isRunning && <div className="log-entry running">Worker is active...</div>}
-          </div>
-        </div>
-      </main>
-    </div>
+          <Route path="login" element={<Login />} />
+          <Route path="admin" element={
+            <ProtectedRoute allowedRoles={['admin']}>
+              <Admin />
+            </ProtectedRoute>
+          } />
+        </Route>
+      </Routes>
+    </BrowserRouter>
   )
 }
 

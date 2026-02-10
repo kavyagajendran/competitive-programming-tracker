@@ -2,7 +2,7 @@ import sys
 import re
 import pandas as pd
 from datetime import datetime
-from leetcode_api import get_user_stats
+from leetcode_api import get_user_stats, get_contest_data_by_date
 from codechef_api import get_codechef_stats
 from codeforces_api import get_codeforces_stats
 from sheets_api import update_sheet
@@ -10,7 +10,7 @@ import time
 import argparse
 import io
 
-def process_tracking(csv_path_or_content, platform, sheet_target, is_content=False, allowed_fields=None):
+def process_tracking(csv_path_or_content, platform, sheet_target, is_content=False, allowed_fields=None, contest_date=None):
     # print(f"[{datetime.now()}] Starting tracking for Platform: {platform}, Target: {sheet_target}")
     pass # Silent start or very minimal
     
@@ -46,6 +46,8 @@ def process_tracking(csv_path_or_content, platform, sheet_target, is_content=Fal
     if allowed_fields:
         fields_list = [f.strip() for f in allowed_fields.split(',') if f.strip()]
         mandatory = ['Profile Link', 'Username', 'Last Updated']
+        if contest_date:
+            mandatory.extend(['Contest Title', 'Contest Date', 'Rank', 'Rating Change', 'Problems Solved'])
         for m in mandatory:
             if m not in fields_list:
                 fields_list.append(m)
@@ -53,39 +55,86 @@ def process_tracking(csv_path_or_content, platform, sheet_target, is_content=Fal
     total = len(df)
     print(f"Tracking {total} {platform} profiles...")
 
-    # 2. Iterate
+    # Auto-detect platform from the first valid URL
     for index, row in df.iterrows():
         profile_url = str(row[col_name]).strip()
-        
         if not profile_url or pd.isna(profile_url):
             continue
             
-        username = extract_username(profile_url, platform)
-        # Short log: [1/5] username
-        print(f"[{index+1}/{total}] {username}")
+        url_lower = profile_url.lower()
+        if 'codechef.com' in url_lower and platform.lower() != 'codechef':
+            print(f"Auto-switching platform to CodeChef based on URL: {profile_url}")
+            platform = 'CodeChef'
+        elif 'codeforces.com' in url_lower and platform.lower() != 'codeforces':
+            print(f"Auto-switching platform to CodeForces based on URL: {profile_url}")
+            platform = 'CodeForces'
+        elif 'leetcode.com' in url_lower and platform.lower() != 'leetcode':
+            print(f"Auto-switching platform to LeetCode based on URL: {profile_url}")
+            platform = 'LeetCode'
+        break
+
+    total = len(df)
+    print(f"Tracking {total} {platform} profiles (Parallel Mode)...")
+
+    import concurrent.futures
+
+    def process_row(args):
+        index, row, platform, col_name, fields_list, contest_date = args
+        profile_url = str(row[col_name]).strip()
         
-        stats = None
-        if platform.lower() == 'leetcode':
-            stats = get_user_stats(username)
-        elif platform.lower() == 'codechef':
-            stats = get_codechef_stats(username)
-        elif platform.lower() == 'codeforces':
-            stats = get_codeforces_stats(username)
-            
+        if not profile_url or pd.isna(profile_url):
+            return None
+
+        username = extract_username(profile_url, platform)
+        print(f"[{index+1}/{total}] Fetching {username}...") # Optional: might be too noisy in parallel
+        
+        try:
+            if platform.lower() == 'leetcode':
+                # Always fetch global stats first
+                stats = get_user_stats(username)
+                
+                if stats and contest_date:
+                    # Fetch specific contest data overlay
+                    contest_data = get_contest_data_by_date(username, contest_date)
+                    if contest_data:
+                        stats.update({
+                            'contest_title': contest_data.get('title'),
+                            'contest_date': contest_data.get('date'),
+                            'contest_rank': contest_data.get('rank'),
+                            'contest_rating': contest_data.get('rating'),
+                            'contest_solved': contest_data.get('problemsSolved'),
+                            'contest_total_problems': contest_data.get('totalProblems')
+                        })
+                    else:
+                        stats.update({
+                             'contest_title': 'Not attended',
+                             'contest_date': contest_date,
+                             'contest_rank': 'N/A',
+                             'contest_rating': 'N/A',
+                             'contest_solved': 0,
+                             'contest_total_problems': 0,
+                             'is_absent': True
+                        })
+            elif platform.lower() == 'codechef':
+                stats = get_codechef_stats(username)
+            elif platform.lower() == 'codeforces':
+                stats = get_codeforces_stats(username)
+        except Exception as e:
+             stats = {'error': str(e)}
+
         # Check failure
         if not stats or (isinstance(stats, dict) and 'error' in stats):
             error_msg = stats.get('error', 'No Stats') if stats else 'No Stats'
-            print(f"  -> Failed: {error_msg}")
+            print(f"  -> {username} Failed: {error_msg}")
             
-            updated_data.append({
+            return {
                 'Profile Link': profile_url, 
                 'Username': stats.get('username', username) if stats else username, 
                 'Error': error_msg,
                 'Last Updated': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            })
+            }
         else:
             # Success logic
-            # Common fields
             record = {
                 'Profile Link': profile_url,
                 'Username': stats.get('username', username),
@@ -94,6 +143,7 @@ def process_tracking(csv_path_or_content, platform, sheet_target, is_content=Fal
             
             # Platform specific
             if platform.lower() == 'leetcode':
+                # Global fields (Working properly now)
                 record.update({
                     'Global Ranking': stats.get('ranking', 'N/A'),
                     'Contest Ranking': stats.get('contest_global_ranking', 'N/A'),
@@ -107,6 +157,16 @@ def process_tracking(csv_path_or_content, platform, sheet_target, is_content=Fal
                     'Last Contest Rank': stats.get('last_contest_rank', 'N/A'),
                     'Last Contest Solved': stats.get('last_contest_solved', 'N/A')
                 })
+
+                if contest_date:
+                     # Specific contest fields overlay
+                    record.update({
+                        'Contest Title': stats.get('contest_title', 'N/A'),
+                        'Contest Date': stats.get('contest_date', 'N/A'),
+                        'Rank': stats.get('contest_rank', 'N/A'),
+                        'Rating Change': stats.get('contest_rating', 'N/A'),
+                        'Problems Solved': f"{stats.get('contest_solved', 0)}/{stats.get('contest_total_problems', 0)}"
+                    })
             elif platform.lower() == 'codechef':
                 record.update({
                     'Current Rating': stats.get('current_rating', 0),
@@ -129,15 +189,33 @@ def process_tracking(csv_path_or_content, platform, sheet_target, is_content=Fal
                     'Last Contest': stats.get('last_contest_title', 'N/A')
                 })
                 
-            # Filter fields if fields_list is set
+                if contest_date:
+                    record.update({
+                        'Contest Title': stats.get('contest_title', 'N/A'),
+                        'Contest Date': stats.get('contest_date', 'N/A'),
+                        'Rank': stats.get('contest_rank', 'N/A'),
+                        'Rating Change': stats.get('contest_rating', 'N/A'),
+                        'Problems Solved': f"{stats.get('contest_solved', 0)}"
+                    })
+                
+            # Filter fields
             if fields_list:
                 filtered_record = {k: v for k, v in record.items() if k in fields_list}
-                updated_data.append(filtered_record)
+                return filtered_record
             else:
-                updated_data.append(record)
+                return record
 
-        # Rate limit
-        time.sleep(2)
+    # Create task args
+    tasks = []
+    for index, row in df.iterrows():
+        tasks.append((index, row, platform, col_name, fields_list, contest_date))
+
+    print(f"Starting parallel execution with max_workers=2...")
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+        results = list(executor.map(process_row, tasks))
+
+    # Filter out None results
+    updated_data = [r for r in results if r]
 
     # 3. Update Sheet
     if updated_data:
@@ -186,6 +264,7 @@ if __name__ == "__main__":
     parser.add_argument('--sheet', help='Target Google Sheet Name or ID', default='Tracking Data')
     parser.add_argument('--is_content', action='store_true', help='Flag to treat csv arg as content string')
     parser.add_argument('--fields', help='Comma separated list of fields to update', default=None)
+    parser.add_argument('--date', help='Contest date (YYYY-MM-DD) for specific lookup', default=None)
     
     args = parser.parse_args()
     
@@ -193,4 +272,4 @@ if __name__ == "__main__":
         print("Error: CSV input required")
         sys.exit(1)
         
-    process_tracking(args.csv, args.platform, args.sheet, args.is_content, args.fields)
+    process_tracking(args.csv, args.platform, args.sheet, args.is_content, args.fields, args.date)

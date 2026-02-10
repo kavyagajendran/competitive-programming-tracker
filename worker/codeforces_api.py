@@ -1,5 +1,12 @@
 import requests
 import time
+from datetime import datetime
+
+# Global session with retries
+session = requests.Session()
+adapter = requests.adapters.HTTPAdapter(max_retries=3)
+session.mount('https://', adapter)
+session.mount('http://', adapter)
 
 def get_codeforces_stats(username):
     """
@@ -17,7 +24,7 @@ def get_codeforces_stats(username):
     
     try:
         # Fetch Info
-        res_info = requests.get(info_url, timeout=10)
+        res_info = session.get(info_url, timeout=30)
         if res_info.status_code != 200:
             print(f"Codeforces API Info failed: {res_info.status_code}")
             return {"error": f"HTTP {res_info.status_code}"}
@@ -34,7 +41,7 @@ def get_codeforces_stats(username):
         
         # Fetch Status for Solved Count
         # This can be large, but usually okay.
-        res_status = requests.get(status_url, timeout=30)
+        res_status = session.get(status_url, timeout=30)
         if res_status.status_code == 200:
             data_status = res_status.json()
             if data_status['status'] == 'OK':
@@ -44,8 +51,6 @@ def get_codeforces_stats(username):
                 
                 # Fetch Info to get last contest ID
                 # We need a separate call for rating history to be accurate about "Last Contest"
-                # But to save API calls, maybe we can infer? No, submissions are mixed.
-                # Let's check rating history.
                 try:
                     res_rating = requests.get(f"https://codeforces.com/api/user.rating?handle={username}", timeout=10)
                     if res_rating.status_code == 200 and res_rating.json()['status'] == 'OK':
@@ -84,5 +89,36 @@ def get_codeforces_stats(username):
         print(f"Exception fetching Codeforces {username}: {e}")
         return {"error": f"Exception: {str(e)}"}
 
+
+def get_upcoming_contests():
+    """
+    Fetches upcoming contests from Codeforces.
+    """
+    url = "https://codeforces.com/api/contest.list?gym=false"
+    try:
+        res = session.get(url, timeout=15)
+        if res.status_code == 200:
+            data = res.json()
+            if data['status'] == 'OK':
+                contests = data['result']
+                upcoming = []
+                for c in contests:
+                    if c['phase'] == 'BEFORE':
+                        # Convert unix timestamp to ISO
+                        start_time = datetime.fromtimestamp(c['startTimeSeconds'])
+                        upcoming.append({
+                            'id': c['id'],
+                            'name': c['name'],
+                            'startTime': start_time.isoformat(),
+                            'duration': c['durationSeconds'],
+                            'platform': 'Codeforces',
+                            'url': f"https://codeforces.com/contests/{c['id']}"
+                        })
+                return upcoming
+    except Exception as e:
+        print(f"Error fetching Codeforces contests: {e}")
+        return []
+
 if __name__ == "__main__":
-    print(get_codeforces_stats("tourist"))
+    # print(get_codeforces_stats("tourist"))
+    print(get_upcoming_contests())
