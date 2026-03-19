@@ -1,0 +1,11 @@
+--- CODEFORCES ---
+CF: 'Educational Codeforces Round 188 (Rated for Div. 2)'
+CF: 'Codeforces Round (Div. 2)'
+--- LEETCODE ---
+LC: 'Weekly Contest 493'
+LC: 'Biweekly Contest 178'
+--- CODECHEF ---
+CC: 'Starters 229'
+CC: 'Monday Munch - DSA Challenge 29'
+CC: 'Starters 230'
+CC: 'Starters 231'

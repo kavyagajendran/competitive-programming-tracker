@@ -9,6 +9,7 @@ import ProtectedRoute from './components/ProtectedRoute'
 import StudentDashboard from './pages/StudentDashboard';
 import StaffDashboard from './pages/StaffDashboard';
 import HODDashboard from './pages/HODDashboard';
+import StudentList from './pages/StudentList';
 
 // Helper to redirect based on role
 function NavigateToDashboard() {
@@ -29,6 +30,18 @@ function App() {
           <Route path="student" element={
             <ProtectedRoute allowedRoles={['student', 'admin', 'hod']}>
               <StudentDashboard />
+            </ProtectedRoute>
+          } />
+
+          <Route path="student/:username" element={
+            <ProtectedRoute allowedRoles={['student', 'admin', 'hod', 'staff']}>
+              <StudentDashboard />
+            </ProtectedRoute>
+          } />
+
+          <Route path="students" element={
+            <ProtectedRoute allowedRoles={['admin', 'hod', 'staff']}>
+              <StudentList />
             </ProtectedRoute>
           } />
 

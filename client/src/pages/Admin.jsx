@@ -23,7 +23,7 @@ export default function Admin() {
 
     const fetchStats = async () => {
         try {
-            const res = await fetch('http://localhost:5000/api/admin/users', {
+            const res = await fetch('/api/admin/users', {
                 headers: { 'x-admin-user': 'Kavya@24' }
             });
             if (res.ok) {
@@ -42,7 +42,7 @@ export default function Admin() {
         setFormError(''); setFormSuccess('');
 
         try {
-            const res = await fetch('http://localhost:5000/api/admin/create-user', {
+            const res = await fetch('/api/admin/create-user', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -67,7 +67,7 @@ export default function Admin() {
         if (!window.confirm(`Are you sure you want to delete ${username}?`)) return;
 
         try {
-            const res = await fetch(`http://localhost:5000/api/admin/users/${username}`, {
+            const res = await fetch(`/api/admin/users/${username}`, {
                 method: 'DELETE',
                 headers: { 'x-admin-user': 'Kavya@24' }
             });
@@ -90,7 +90,7 @@ export default function Admin() {
         if (!window.confirm(`Change ${user.username} from ${user.role} to ${nextRole}?`)) return;
 
         try {
-            const res = await fetch(`http://localhost:5000/api/admin/users/${user.username}/role`, {
+            const res = await fetch(`/api/admin/users/${user.username}/role`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json', 'x-admin-user': 'Kavya@24' },
                 body: JSON.stringify({ role: nextRole })

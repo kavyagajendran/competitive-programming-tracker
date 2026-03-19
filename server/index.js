@@ -7,10 +7,21 @@ const cron = require('node-cron');
 require('dotenv').config();
 
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 5001;
 
 app.use(cors());
 app.use(express.json());
+// Global JSON error handler
+app.use((err, req, res, next) => {
+    if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
+        console.error('Bad JSON:', err.message);
+        return res.status(400).send({ message: 'Invalid JSON body' });
+    }
+    next();
+});
+app.get('/api/test-early', (req, res) => res.json({ message: 'Early route works' }));
+
+
 
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
@@ -49,15 +60,46 @@ function seedAdmin() {
 }
 seedAdmin();
 
+// Middleware to authenticate token
+function authenticateToken(req, res, next) {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+
+    if (!token) {
+        // Fallback for simple header-based auth if no JWT is provided (for backward compatibility)
+        const adminUser = req.headers['x-admin-user'];
+        if (adminUser === 'Kavya@24') {
+            req.user = { username: adminUser, role: 'admin', department: 'AIML' };
+            return next();
+        }
+        return res.status(401).json({ message: 'Token required' });
+    }
+
+    jwt.verify(token, SECRET_KEY, (err, user) => {
+        if (err) return res.status(403).json({ message: 'Invalid or expired token' });
+        req.user = user;
+        next();
+    });
+}
+
 // Middleware to check Admin
 function isAdmin(req, res, next) {
-    // In real app use JWT verification. Here we trust the header/body logic for simplicity as requested.
-    // We'll check the 'x-admin-user' header.
-    const username = req.headers['x-admin-user'];
-    if (username !== 'Kavya@24') { // Weak check for this specific project as designed
-        return res.status(403).json({ message: 'Access denied: Admins only' });
-    }
-    next();
+    authenticateToken(req, res, () => {
+        if (req.user.role !== 'admin') {
+            return res.status(403).json({ message: 'Access denied: Admins only' });
+        }
+        next();
+    });
+}
+
+// Middleware to check HOD/Staff
+function isHOD(req, res, next) {
+    authenticateToken(req, res, () => {
+        if (req.user.role !== 'hod' && req.user.role !== 'admin' && req.user.role !== 'staff') {
+            return res.status(403).json({ message: 'Access denied: HOD, Staff, or Admin only' });
+        }
+        next();
+    });
 }
 
 // Auth Routes
@@ -87,8 +129,12 @@ app.post('/api/auth/login', (req, res) => {
     users[userIndex] = user;
     fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2));
 
-    const token = jwt.sign({ id: user.id, username: user.username, role: user.role || 'user' }, SECRET_KEY, { expiresIn: '24h' });
-    res.json({ token, username: user.username, role: user.role || 'user' });
+    const token = jwt.sign(
+        { id: user.id, username: user.username, role: user.role || 'user', department: user.department },
+        SECRET_KEY,
+        { expiresIn: '24h' }
+    );
+    res.json({ token, username: user.username, role: user.role || 'user', department: user.department });
 });
 
 // ADMIN: Create User
@@ -330,75 +376,71 @@ app.post('/api/leetcode/contest', (req, res) => {
         return res.status(400).json({ message: 'Missing username or date' });
     }
 
+    const tempFile = path.join(__dirname, `temp_contest_${Date.now()}.json`);
     const scriptPath = path.join(__dirname, '../worker/fetch_contest.py');
-    const args = [scriptPath, '--username', username, '--date', date];
+    const args = [scriptPath, '--username', username, '--date', date, '--output', tempFile];
 
-    // Spawn separate process for this quick lookups
     const process = spawn(PYTHON_CMD, args);
-    let outputData = '';
     let errorData = '';
-
-    process.stdout.on('data', (data) => {
-        outputData += data.toString();
-    });
 
     process.stderr.on('data', (data) => {
         errorData += data.toString();
     });
 
     process.on('close', (code) => {
-        if (code !== 0) {
-            // Try to parse error from stdout if it's JSON
+        if (fs.existsSync(tempFile)) {
             try {
-                const json = JSON.parse(outputData);
+                const data = fs.readFileSync(tempFile, 'utf8');
+                const json = JSON.parse(data);
+                fs.unlinkSync(tempFile); // Clean up
                 if (json.error) return res.status(404).json({ message: json.error });
-            } catch (e) { }
+                return res.json(json);
+            } catch (e) {
+                console.error("Parse error:", e);
+            }
+        }
 
+        if (code !== 0) {
             console.error("Fetch contest error:", errorData);
             return res.status(500).json({ message: 'Failed to fetch contest details', error: errorData });
         }
-
-        try {
-            const json = JSON.parse(outputData);
-            res.json(json);
-        } catch (e) {
-            res.status(500).json({ message: 'Failed to parse worker response' });
-        }
+        res.status(500).json({ message: 'Failed to parse worker response' });
     });
 });
 
 
-// ... existing code ...
+
 
 const CONTEST_SCRIPT = path.join(__dirname, '../worker/get_upcoming_contests.py');
 const ANNOUNCEMENTS_FILE = path.join(__dirname, 'announcements.json');
 
 // Get Upcoming Contests
 app.get('/api/contests', (req, res) => {
-    const process = spawn(PYTHON_CMD, [CONTEST_SCRIPT]);
-    let outputData = '';
+    const tempFile = path.join(__dirname, `temp_contests_${Date.now()}.json`);
+    const process = spawn(PYTHON_CMD, [CONTEST_SCRIPT, '--output', tempFile]);
     let errorData = '';
-
-    process.stdout.on('data', (data) => {
-        outputData += data.toString();
-    });
 
     process.stderr.on('data', (data) => {
         errorData += data.toString();
     });
 
     process.on('close', (code) => {
+        if (fs.existsSync(tempFile)) {
+            try {
+                const data = fs.readFileSync(tempFile, 'utf8');
+                const json = JSON.parse(data);
+                fs.unlinkSync(tempFile); // Clean up
+                return res.json(json);
+            } catch (e) {
+                console.error("Parse error:", e);
+            }
+        }
+
         if (code !== 0) {
             console.error("Fetch contests error:", errorData);
             return res.status(500).json({ message: 'Failed to fetch contests', error: errorData });
         }
-        try {
-            const json = JSON.parse(outputData);
-            res.json(json);
-        } catch (e) {
-            console.error("Parse error:", e, outputData);
-            res.status(500).json({ message: 'Failed to parse contest data' });
-        }
+        res.status(500).json({ message: 'Failed to parse contest data' });
     });
 });
 
@@ -441,6 +483,187 @@ app.post('/api/announcements', (req, res) => {
     announcements.unshift(newAnnouncement); // Newest first
     fs.writeFileSync(ANNOUNCEMENTS_FILE, JSON.stringify(announcements, null, 2));
     res.json(newAnnouncement);
+});
+
+// Admin Dashboard Stats
+app.get('/api/admin/dashboard-stats', isAdmin, (req, res) => {
+    let users = [];
+    if (fs.existsSync(USERS_FILE)) {
+        try { users = JSON.parse(fs.readFileSync(USERS_FILE, 'utf8')); } catch (e) { }
+    }
+
+    const roleDistribution = users.reduce((acc, u) => {
+        const role = u.role || 'student';
+        acc[role] = (acc[role] || 0) + 1;
+        return acc;
+    }, {});
+
+    const deptDistribution = users.reduce((acc, u) => {
+        acc[u.department] = (acc[u.department] || 0) + 1;
+        return acc;
+    }, {});
+
+    res.json({
+        totalUsers: users.length,
+        roleDistribution,
+        deptDistribution,
+        systemStatus: 'Active'
+    });
+});
+
+// Helper to get students from CSV
+function getCsvStudents() {
+    const csvPath = path.join(__dirname, '../Student_login_info.csv');
+    if (!fs.existsSync(csvPath)) return [];
+    try {
+        const content = fs.readFileSync(csvPath, 'utf8');
+        const lines = content.split('\n').slice(1); // skip header
+        return lines
+            .filter(line => line.trim())
+            .map(line => {
+                const [name, pass] = line.split(',');
+                return {
+                    username: name.trim(),
+                    password: pass ? pass.trim() : ''
+                };
+            });
+    } catch (e) {
+        console.error("CSV parse error", e);
+        return [];
+    }
+}
+
+// HOD Dashboard Stats
+app.get('/api/hod/dashboard-stats', isHOD, (req, res) => {
+    const dept = req.user.department;
+    let users = [];
+    if (fs.existsSync(USERS_FILE)) {
+        try { users = JSON.parse(fs.readFileSync(USERS_FILE, 'utf8')); } catch (e) { }
+    }
+
+    // Get students from CSV
+    const csvStudents = getCsvStudents();
+
+    // For stats, we still need to check login history from users.json
+    const deptUsers = users.filter(u => u.department === dept);
+    const activeTodayCount = deptUsers.filter(u =>
+        (u.role === 'student' || !u.role) &&
+        u.loginHistory &&
+        u.loginHistory.some(t => t.startsWith(new Date().toISOString().split('T')[0]))
+    ).length;
+
+    res.json({
+        totalStudents: csvStudents.length > 0 ? csvStudents.length : deptUsers.filter(u => u.role === 'student' || !u.role).length,
+        activeToday: activeTodayCount,
+        topPerformers: [] // Placeholder
+    });
+});
+
+// HOD Students List
+app.get('/api/hod/students', isHOD, (req, res) => {
+    const deptContext = req.user.department;
+    if (!deptContext) return res.status(400).json({ message: 'Department context required' });
+
+    let users = [];
+    if (fs.existsSync(USERS_FILE)) {
+        try { users = JSON.parse(fs.readFileSync(USERS_FILE, 'utf8')); } catch (e) { users = []; }
+    }
+
+    const csvStudentsList = getCsvStudents();
+
+    // Map CSV students to system data
+    const students = csvStudentsList.map(csvStudent => {
+        const existingUser = users.find(u => u.username === csvStudent.username);
+        return {
+            username: csvStudent.username,
+            role: existingUser?.role || 'student',
+            department: existingUser?.department || deptContext,
+            registeredContests: existingUser?.registeredContests || [],
+            totalLogins: existingUser?.loginHistory ? existingUser.loginHistory.length : 0,
+            lastLogin: existingUser?.loginHistory && existingUser.loginHistory.length > 0
+                ? existingUser.loginHistory[existingUser.loginHistory.length - 1]
+                : 'Never'
+        };
+    });
+
+    // If CSV is empty, fallback to users.json
+    if (students.length === 0) {
+        const fallback = users
+            .filter(u => u.department === deptContext && (u.role === 'student' || u.role === 'user' || !u.role))
+            .map(u => ({
+                username: u.username,
+                role: u.role || 'user',
+                department: u.department,
+                registeredContests: u.registeredContests || [],
+                totalLogins: u.loginHistory ? u.loginHistory.length : 0,
+                lastLogin: u.loginHistory && u.loginHistory.length > 0
+                    ? u.loginHistory[u.loginHistory.length - 1]
+                    : 'Never'
+            }));
+        return res.json(fallback);
+    }
+
+    res.json(students);
+});
+
+// Student Stats
+app.get('/api/student/stats/:username', authenticateToken, (req, res) => {
+    const { username } = req.params;
+    if (req.user.role === 'student' && req.user.username !== username) {
+        return res.status(403).json({ message: 'Unauthorized' });
+    }
+
+    let users = [];
+    if (fs.existsSync(USERS_FILE)) {
+        try { users = JSON.parse(fs.readFileSync(USERS_FILE, 'utf8')); } catch (e) { }
+    }
+
+    const user = users.find(u => u.username === username);
+    const loginHistory = user?.loginHistory || [];
+
+    // Calculate unique days active
+    const uniqueDays = new Set(loginHistory.map(d => d.split('T')[0]));
+    const daysActive = uniqueDays.size;
+
+    // Simulate performance data for the past 30 days
+    const performanceData = [];
+    const now = new Date();
+    for (let i = 30; i >= 0; i--) {
+        const d = new Date();
+        d.setDate(now.getDate() - i);
+        const dateStr = d.toISOString().split('T')[0];
+        const dayName = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
+        // Base rating + some variance
+        const baseRating = 1200 + (Math.sin(i / 5) * 100);
+        performanceData.push({
+            date: dateStr,
+            name: dayName,
+            rating: Math.floor(baseRating + (Math.random() * 50)),
+            solved: Math.floor(Math.random() * 5)
+        });
+    }
+
+    // Working hours summary (Pie Chart data)
+    const workingHours = [
+        { name: 'LeetCode', value: Math.floor(Math.random() * 40) + 20, color: '#ffa116' },
+        { name: 'Codeforces', value: Math.floor(Math.random() * 30) + 10, color: '#1890ff' },
+        { name: 'CodeChef', value: Math.floor(Math.random() * 20) + 5, color: '#5b4638' },
+        { name: 'Study', value: Math.floor(Math.random() * 20) + 10, color: '#52c41a' }
+    ];
+
+    res.json({
+        leetcode: { solved: Math.floor(Math.random() * 500) + 100, ranking: 'Top 5%', rating: 1750 + Math.floor(Math.random() * 200) },
+        codeforces: { rating: 1400 + Math.floor(Math.random() * 400), rank: 'Specialist', maxRating: 1650 },
+        codechef: { rating: 1650 + Math.floor(Math.random() * 300), stars: '4' },
+        activity: {
+            daysActive,
+            totalWorkingHours: Math.floor(daysActive * 2.5), // simulated 2.5 hours per active day
+            weeklyAverage: (daysActive / 4).toFixed(1)
+        },
+        performanceData,
+        workingHours
+    });
 });
 
 app.put('/api/announcements/:id', (req, res) => {

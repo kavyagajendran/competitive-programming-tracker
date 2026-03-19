@@ -1,5 +1,6 @@
 import requests
 import time
+import sys
 from datetime import datetime
 
 # Global session with retries
@@ -26,7 +27,7 @@ def get_codeforces_stats(username):
         # Fetch Info
         res_info = session.get(info_url, timeout=30)
         if res_info.status_code != 200:
-            print(f"Codeforces API Info failed: {res_info.status_code}")
+            sys.stderr.write(f"Codeforces API Info failed: {res_info.status_code}\n")
             return {"error": f"HTTP {res_info.status_code}"}
             
         data_info = res_info.json()
@@ -68,7 +69,7 @@ def get_codeforces_stats(username):
                                         last_contest_solved.add(sub['problem']['index'])
                             stats['last_contest_solved'] = len(last_contest_solved)
                 except Exception as e:
-                    print(f"Error fetching CF rating history: {e}")
+                    sys.stderr.write(f"Error fetching CF rating history: {e}\n")
 
                 for sub in submissions:
                     if sub.get('verdict') == 'OK':
@@ -86,7 +87,7 @@ def get_codeforces_stats(username):
         return stats
 
     except Exception as e:
-        print(f"Exception fetching Codeforces {username}: {e}")
+        sys.stderr.write(f"Exception fetching Codeforces {username}: {e}\n")
         return {"error": f"Exception: {str(e)}"}
 
 
@@ -116,7 +117,7 @@ def get_upcoming_contests():
                         })
                 return upcoming
     except Exception as e:
-        print(f"Error fetching Codeforces contests: {e}")
+        sys.stderr.write(f"Error fetching Codeforces contests: {e}\n")
         return []
 
 if __name__ == "__main__":

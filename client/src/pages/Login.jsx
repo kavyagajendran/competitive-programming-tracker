@@ -4,6 +4,7 @@ import { useNavigate, Link } from 'react-router-dom';
 export default function Login() {
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
+    const [department, setDepartment] = useState('AIML');
     const [error, setError] = useState('');
     const navigate = useNavigate();
 
@@ -12,10 +13,10 @@ export default function Login() {
         setError('');
 
         try {
-            const res = await fetch('http://localhost:5000/api/auth/login', {
+            const res = await fetch('/api/auth/login', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username, password })
+                body: JSON.stringify({ username, password, department })
             });
 
             const data = await res.json();
@@ -24,6 +25,7 @@ export default function Login() {
                 localStorage.setItem('token', data.token);
                 localStorage.setItem('username', data.username);
                 localStorage.setItem('role', data.role);
+                localStorage.setItem('department', data.department);
                 window.location.href = '/';
             } else {
                 setError(data.message || 'Login failed');
@@ -39,6 +41,20 @@ export default function Login() {
                 <h2>Login</h2>
                 {error && <p className="error-msg">{error}</p>}
                 <form onSubmit={handleSubmit}>
+                    <div className="form-group">
+                        <label>Department</label>
+                        <select
+                            value={department}
+                            onChange={(e) => setDepartment(e.target.value)}
+                            style={{ width: '100%', padding: '10px', borderRadius: '4px', border: '1px solid #ccc' }}
+                        >
+                            <option value="AIDS">AIDS</option>
+                            <option value="AIML">AIML</option>
+                            <option value="CSBS">CSBS</option>
+                            <option value="CSE">CSE</option>
+                            <option value="DEAN">DEAN</option>
+                        </select>
+                    </div>
                     <div className="form-group">
                         <label>Username</label>
                         <input

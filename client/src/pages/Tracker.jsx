@@ -34,7 +34,7 @@ export default function Tracker() {
 
     const fetchStatus = async () => {
         try {
-            const res = await fetch('http://localhost:5000/api/status')
+            const res = await fetch('/api/status')
             const data = await res.json()
             setStatus(data)
         } catch (error) {
@@ -45,11 +45,11 @@ export default function Tracker() {
     useEffect(() => {
         const init = async () => {
             try {
-                const res = await fetch('http://localhost:5000/api/status')
+                const res = await fetch('/api/status')
                 const data = await res.json()
 
                 if (!data.isRunning) {
-                    await fetch('http://localhost:5000/api/logs/clear', { method: 'POST' })
+                    await fetch('/api/logs/clear', { method: 'POST' })
                     setStatus({ isRunning: false, logs: [] })
                 } else {
                     setStatus(data)
@@ -106,7 +106,7 @@ export default function Tracker() {
             const text = e.target.result
 
             try {
-                const res = await fetch('http://localhost:5000/api/track', {
+                const res = await fetch('/api/track', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({

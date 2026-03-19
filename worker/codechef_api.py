@@ -1,6 +1,7 @@
 import requests
 from bs4 import BeautifulSoup
 import time
+import sys
 
 def get_codechef_stats(username):
     """
@@ -20,26 +21,26 @@ def get_codechef_stats(username):
             elif response.status_code == 429:
                 # Rate limited
                 wait = (2 ** attempt) * 2
-                print(f"Rate limited for {username}. Retrying in {wait}s...")
+                sys.stderr.write(f"Rate limited for {username}. Retrying in {wait}s...\n")
                 time.sleep(wait)
                 continue
             elif response.status_code == 404:
-                print(f"User {username} not found (404).")
+                sys.stderr.write(f"User {username} not found (404).\n")
                 return {"error": "User Not Found (404)"}
             else:
-                print(f"Failed to fetch CodeChef profile for {username}. Status: {response.status_code}")
+                sys.stderr.write(f"Failed to fetch CodeChef profile for {username}. Status: {response.status_code}\n")
                 # Don't retry for other 4xx errors usually, but 5xx we might.
                 if response.status_code >= 500:
                     time.sleep(1)
                     continue
                 return {"error": f"HTTP {response.status_code}"}
         except requests.RequestException as e:
-            print(f"Network error for {username}: {e}")
+            sys.stderr.write(f"Network error for {username}: {e}\n")
             time.sleep(1)
             continue
     else:
         # Loop finished without breaking
-        print(f"Max retries reached for {username}")
+        sys.stderr.write(f"Max retries reached for {username}\n")
         return {"error": "Max retries (Rate Limit/Network)"}
 
     try:
@@ -115,7 +116,7 @@ def get_codechef_stats(username):
         return stats
 
     except Exception as e:
-        print(f"Exception fetching CodeChef {username}: {e}")
+        sys.stderr.write(f"Exception fetching CodeChef {username}: {e}\n")
         return {"error": f"Exception: {str(e)}"}
 
 
@@ -161,7 +162,7 @@ def get_upcoming_contests():
                     })
                 return upcoming
     except Exception as e:
-        print(f"Error fetching CodeChef contests: {e}")
+        sys.stderr.write(f"Error fetching CodeChef contests: {e}\n")
         return []
 
 if __name__ == "__main__":

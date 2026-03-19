@@ -1,0 +1,27 @@
+--- Verifying Department Segregation ---
+
+1. Admin Login (AIML)...
+SUCCESS
+
+2. Creating Users...
+Users created (ignoring duplicates)
+
+3. Verify Admin View (AIML Context)...
+Users in AIML context: ['Kavya@24', 'Kavya', 'student', 'staff', 'hod', 'ABHINAND', 'ADHITHYAN', 'AJITHA', 'ALWARSAMY', 'AMIRTHAVARSHNI', 'ANTONYBENATICT', 'ARCHSUNAN', 'ATHULRAJ', 'DAVIDBACKAM', 'DAVIDVENSILIN', 'DEEPAK', 'DHAANISHNIHAAL', 'DHANYATHAA', 'DHARSHINI', 'DHINAKARAN', 'ELANGO', 'ELSONBENANZAL', 'ETHUKRISHNA', 'GIRIBALAN', 'GOWTHAMRAJ', 'HARISH', 'HARISHWAR', 'HEMACHANDRAN', 'KAMALI', 'KARTHICK', 'KAVYA', 'MALATHI', 'MOHANKUMAR', 'MOHANRAJ', 'MONICAAISHWARYA', 'MUKESHKUMAR', 'NITHISHKUMAR', 'PANDIHARSHAN', 'PRADEEPAN', 'PRAKASH', 'PRIYANGA', 'RAGA', 'RUTHRAYINI', 'SACHIN', 'SANDHIYA', 'SANJAIVEERAN', 'SARIKAASHREE', 'SARVESHRAM', 'SATHYA', 'SHADYA', 'SHANMUGAM', 'SILAMBARASAN', 'SRIDHARAN', 'SUDARSHAN', 'SUMAN', 'SURIYA', 'VIJAY', 'VIJAYPRASATH', 'VIKNESH', 'VISHALRAJ', 'YOGESHPRIYAN', 'YUVANRAJ', 'PRATHAP', 'SABARISHWARAN', 'SUKANT', 'Anuja', 'Jannet', 'Banupriya', 'Anu', 'staff_aiml']
+SUCCESS: Only AIML users visible.
+
+4. Verify Admin View (CSE Context)...
+Users in CSE context: ['staff_cse']
+SUCCESS: Only CSE users visible.
+
+5. Post Announcement (AIML)...
+
+6. Post Announcement (CSE)...
+
+7. Verify Announcement Isolation...
+AIML Context Announcements: ['AIML Info', 'AIML Info', 'AIML Info', 'Register']
+SUCCESS: AIML Isolation verification passed.
+
+8. Login Segregation...
+SUCCESS: staff_aiml logged into AIML.
+SUCCESS: staff_aiml denied access to CSE.

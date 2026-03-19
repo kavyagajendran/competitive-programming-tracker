@@ -27,6 +27,10 @@ export default function Layout() {
                                     Admin Dashboard
                                 </Link>
                             )}
+                            {/* Students List Link for Admin, HOD, Staff */}
+                            {token && (localStorage.getItem('role') === 'admin' || localStorage.getItem('role') === 'hod' || localStorage.getItem('role') === 'staff') && (
+                                <Link to="/students" className="nav-link">Students</Link>
+                            )}
                             <button onClick={handleLogout} className="btn-logout">Logout</button>
                         </>
                     ) : (

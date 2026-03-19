@@ -1,6 +1,7 @@
 import datetime
 import requests
 import time
+import sys
 
 LEETCODE_URL = "https://leetcode.com/graphql"
 
@@ -104,7 +105,7 @@ def get_user_stats(username):
         return stats
 
     except Exception as e:
-        print(f"Exception fetching {username}: {e}")
+        sys.stderr.write(f"Exception fetching {username}: {e}\n")
         return None
 
 def get_contest_data_by_date(username, date_str):
@@ -172,7 +173,7 @@ def get_contest_data_by_date(username, date_str):
         return None # Not found
 
     except Exception as e:
-        print(f"Exception fetching contest by date for {username}: {e}")
+        sys.stderr.write(f"Exception fetching contest by date for {username}: {e}\n")
         return None
 
 
@@ -217,7 +218,7 @@ def get_upcoming_contests():
                 })
             return upcoming
     except Exception as e:
-        print(f"Error fetching LeetCode contests: {e}")
+        sys.stderr.write(f"Error fetching LeetCode contests: {e}\n")
         return []
 
 if __name__ == "__main__":
